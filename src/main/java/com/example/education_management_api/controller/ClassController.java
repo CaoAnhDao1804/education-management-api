@@ -1,0 +1,173 @@
+package com.example.education_management_api.controller;
+
+
+import com.example.education_management_api.dto.ClassDetailDto;
+import com.example.education_management_api.dto.StudentOfClassDto;
+import com.example.education_management_api.entity.Classes;
+import com.example.education_management_api.entity.StudentsOfClass;
+import com.example.education_management_api.entity.StudentsOfClassId;
+import com.example.education_management_api.repository.ClassRepository;
+import com.example.education_management_api.repository.StudentsOfClassRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.sql.Date;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping("/classes")
+public class ClassController {
+
+    private final ClassRepository classRepository;
+    private final StudentsOfClassRepository studentsOfClassRepository;
+
+    public ClassController(ClassRepository classRepository, StudentsOfClassRepository studentsOfClassRepository) {
+        this.classRepository = classRepository;
+        this.studentsOfClassRepository = studentsOfClassRepository;
+    }
+
+    @GetMapping("/all")
+    public java.util.List<Classes> getAllClasses() {
+        // select * from classes
+        return classRepository.findAll();
+    }
+
+    @PostMapping("/class-detail")
+    public Classes getClassDetail(@RequestParam Integer classId) {
+        return classRepository.findById(classId).orElse(null);
+    }
+
+    @GetMapping("/allDetail")
+    public List<ClassDetailDto> findAllClassDetail() {
+        List<Object[]> results = classRepository.findAllClassesDetail();
+        List<ClassDetailDto> details = new ArrayList<>();
+
+        for (Object[] row: results) {
+            System.out.println(row[0]);
+            //1 -> Object[] [-1, "Java Core", 2, "Dao", "F6", 2025-12-12]
+            ClassDetailDto classDetail = new ClassDetailDto(
+                    (Integer) row[0],    // class_id
+                    (String) row[1],     // class_name
+                    (Integer) row[2],    // teacher_id
+                    (String) row[3],     // teacher_name
+                    (Integer) row[4],    // course_id
+                    (String) row[5],     // description (now courseName in DTO)
+                    ((Date) row[6]).toLocalDate(),
+                    (Long) row[7]     // amount_of_students
+            );
+            details.add(classDetail);
+        }
+        return details;
+    }
+
+    @PostMapping("/allDetailBySearch")
+    public List<ClassDetailDto> findAllClassDetailBySearch(@RequestParam String className,
+                                                           @RequestParam String teacherName,
+                                                           @RequestParam String courseName,
+                                                           @RequestParam String startDate) {
+        LocalDate startDateValue = null;
+        if (startDate != null && !startDate.isEmpty()) {
+            startDateValue = LocalDate.parse(startDate);
+        }
+        List<Object[]> results = classRepository.findClassesDetailsByFilterValues(className, teacherName, courseName, startDateValue);
+
+        List<ClassDetailDto> details = new ArrayList<>();
+
+        for (Object[] row : results) {
+            System.out.println(row[0]);
+            //1 -> Object[] [-1, "Java Core", 2, "Dao", "F6", 2025-12-12]
+            ClassDetailDto classDetail = new ClassDetailDto(
+                    (Integer) row[0],    // class_id
+                    (String) row[1],     // class_name
+                    (Integer) row[2],    // teacher_id
+                    (String) row[3],     // teacher_name
+                    (Integer) row[4],    // course_id
+                    (String) row[5],     // description (now courseName in DTO)
+                    ((Date) row[6]).toLocalDate(),
+                    (Long) row[7]
+            );
+            details.add(classDetail);
+        }
+        return details;
+    }
+
+    @PostMapping("/add")
+    public String createClasses(@RequestParam String className, @RequestParam int teacherId, @RequestParam int courseId, @RequestParam LocalDate startDate) {
+        Classes classes = new Classes(className, teacherId, courseId, startDate);
+        try {
+            classRepository.save(classes);
+            return "Đã tạo class thành công!";
+        } catch (Exception e) {
+            return "Không thể tạo class được!";
+        }
+    }
+
+    @PutMapping("/update")
+    public void updateStudent(@RequestParam Integer classId, @RequestParam String className, @RequestParam Integer teacherId,
+                              @RequestParam Integer courseId, @RequestParam LocalDate startDate) {
+        Classes updatedClasses = new Classes(classId, className, teacherId, courseId, startDate);
+        classRepository.save(updatedClasses);
+    }
+
+    @DeleteMapping("/delete")
+    public String deleteClass(@RequestParam int classId) {
+        try {
+            classRepository.deleteById(classId);
+            return "Đã xóa class thành công!";
+        } catch (Exception e) {
+            return "Không thể xóa class được!";
+        }
+    }
+
+    @PostMapping("/add-student-to-class")
+    public ResponseEntity<String> addStudentToClass(@RequestParam Integer classId, @RequestParam Integer studentId) {
+        StudentsOfClassId id = new StudentsOfClassId(classId, studentId);
+        StudentsOfClass student = new StudentsOfClass(id);
+        try {
+            boolean isExistedStudents = studentsOfClassRepository.findById(id).isPresent();
+            if (isExistedStudents) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
+            studentsOfClassRepository.save(student);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @DeleteMapping("/remove-student-from-class")
+    public ResponseEntity<String> deleteStudentFromClass(@RequestParam Integer classId, @RequestParam Integer studentId) {
+        try {
+            StudentsOfClassId id = new StudentsOfClassId(classId, studentId);
+            studentsOfClassRepository.deleteById(id);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PostMapping("/get-list-students-of-class")
+    public List<StudentOfClassDto> getListStudentsOfClass(@RequestParam Integer classId) {
+        List<Object[]> results = classRepository.listStudentsOfClass(classId);
+
+        List<StudentOfClassDto> students = new ArrayList<>();
+
+        for (Object[] row : results) {
+            System.out.println(row[0]);
+            //1 -> Object[] [-1, "Java Core", 2, "Dao", "F6", 2025-12-12]
+            StudentOfClassDto studentInfo = new StudentOfClassDto(
+                    (Integer) row[0],    // student_id
+                    (String) row[1],     // student_name
+                    (String) row[2],    // email
+                    ((Date) row[3]).toLocalDate(),     // birthday
+                    (String) row[4]    // phone_number
+            );
+            students.add(studentInfo);
+        }
+        return students;
+    }
+}
